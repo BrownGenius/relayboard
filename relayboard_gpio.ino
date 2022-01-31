@@ -1,38 +1,50 @@
-#include <Wire.h>
 
 // GPIO Relayboard test
 // connect VDD to power 5V
 // connect GND to power GND
 
 #define NUM_RELAYS 16
+#define INITIAL_VALUE 1
 
 uint8_t relay2PinMapping[NUM_RELAYS] = {
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    14,
-    15,
-    16,
-    17,
-    18,
-    19};
+    9,  /* Relay 0 */
+    11, /* Relay 1 */
+    8,  /* Relay 2 */
+    10, /* Relay 3 */
+    7,  /* Relay 4 */
+    A0, /* Relay 5 */
+    6,  /* Relay 6 */
+    A1, /* Relay 7 */
+    5,  /* Relay 8 */
+    A2, /* Relay 9 */
+    4,  /* Relay a (10) */
+    A3, /* Relay b (11) */
+    3,  /* Relay c (1)2 */
+    A4, /* Relay d (13) */
+    2,  /* Relay e (14) */
+    A5, /* Relay f (15) */
+};
 
-void setup()
+static uint16_t olat;
+
+void resetPins(bool initialize)
 {
     uint8_t relay;
 
     for (relay = 0; relay < NUM_RELAYS; relay++)
     {
-        pinMode(relay2PinMapping[relay], OUTPUT);
-        digitalWrite(relay2PinMapping[relay], 0);
+        olat &= ~(1 << relay);
+        olat |= (INITIAL_VALUE << relay);
+        if (initialize) {
+            pinMode(relay2PinMapping[relay], OUTPUT);
+        }
+        digitalWrite(relay2PinMapping[relay], INITIAL_VALUE);
     }
+}
+
+void setup()
+{
+    resetPins(true);
 
     // start serial port at 9600 bps and wait for port to open:
     Serial.begin(9600);
@@ -45,8 +57,6 @@ void loop()
 {
     char input;
     uint8_t relay;
-    int i;
-    static uint16_t olat;
 
     if (Serial.available() > 0)
     {
@@ -57,27 +67,23 @@ void loop()
         }
         else if ((input >= 'a') && (input <= 'z'))
         {
-            relay = input - 'a';
+            relay = (input - 'a')+10;
         }
         if (input == '*')
         {
             Serial.println("Clear");
-            olat = 0;
-            for (relay = 0; relay < NUM_RELAYS; relay++)
-            {
-                digitalWrite(relay2PinMapping[relay], 0);
-            }
+            resetPins(false);
         }
         else if (relay < NUM_RELAYS)
         {
-            olat ^= 1 << relay;
+            olat ^= (1 << relay);
             digitalWrite(relay2PinMapping[relay], (olat >> relay) & 0x1);
         }
 
         for (relay = 0; relay < NUM_RELAYS; relay++)
         {
             Serial.print(relay);
-            Serial.print((olat & (1 << i) ? ": ON  " : ": OFF "));
+            Serial.print((olat & (1 << relay) ? ": ON  " : ": OFF "));
         }
         Serial.println();
     }
