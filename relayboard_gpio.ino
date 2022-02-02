@@ -1,12 +1,14 @@
+#include <ArduinoJson.h>
 
 // GPIO Relayboard test
 // connect VDD to power 5V
 // connect GND to power GND
 
-#define NUM_RELAYS 16
-#define INITIAL_VALUE 1
+#define RELAY_COUNT 16
+#define RELAY_ENABLE 1
+#define RELAY_DISABLE 0
 
-uint8_t relay2PinMapping[NUM_RELAYS] = {
+uint8_t relay2PinMapping[RELAY_COUNT] = {
     9,  /* Relay 0 */
     11, /* Relay 1 */
     8,  /* Relay 2 */
@@ -25,66 +27,115 @@ uint8_t relay2PinMapping[NUM_RELAYS] = {
     A5, /* Relay f (15) */
 };
 
-static uint16_t olat;
+/* JSON Format */
+#if 0
+{
+	"relays": [{
+			"port":0,
+			"enabled":true
+		},
+	]
+}
+{"relays":[{"port":0,"enable":false},{"port":2,"enable":false}]}
+{"command":"status"}
 
-void resetPins(bool initialize)
+{"command":"info","relays":[{"port":0,"enable":false},{"port":2,"enable":false}]}
+
+{"command":"info"}
+
+#endif
+
+#define VERSION 0x20220202
+
+StaticJsonDocument<32*RELAY_COUNT> status;
+StaticJsonDocument<32*RELAY_COUNT> input;
+
+void printInfo()
+{
+    StaticJsonDocument<256> info;
+
+    info["model"] = "GPIO Relay Board";
+    info["version"] = VERSION;
+    info["relay count"] = RELAY_COUNT;
+
+    serializeJson(info, Serial);
+    Serial.println();
+}
+
+void printStatus()
+{
+    serializeJson(status, Serial);
+    Serial.println();
+}
+
+void setRelay(uint8_t relay, bool enable)
+{
+    /* TODO: Validate relay */
+    digitalWrite(relay2PinMapping[relay], enable ? RELAY_ENABLE : RELAY_DISABLE);
+    status["relays"][relay]["port"] = relay;
+    status["relays"][relay]["enable"] = enable;
+}
+
+void initRelays(bool initialize)
 {
     uint8_t relay;
 
-    for (relay = 0; relay < NUM_RELAYS; relay++)
+    for (relay = 0; relay < RELAY_COUNT; relay++)
     {
-        olat &= ~(1 << relay);
-        olat |= (INITIAL_VALUE << relay);
         if (initialize) {
             pinMode(relay2PinMapping[relay], OUTPUT);
         }
-        digitalWrite(relay2PinMapping[relay], INITIAL_VALUE);
+        setRelay(relay, true);
     }
 }
 
 void setup()
 {
-    resetPins(true);
+    status.createNestedArray("relays");
+
+    initRelays(true);
 
     // start serial port at 9600 bps and wait for port to open:
     Serial.begin(9600);
     while (!Serial)
         ; // wait for serial port to connect. Needed for Leonardo only
-    Serial.println("I2C Relayboard test - press keys 0123456789abcdef` (toggle relay) * (clear all)");
+    printInfo();
 }
 
 void loop()
 {
-    char input;
-    uint8_t relay;
+    DeserializationError err;
 
-    if (Serial.available() > 0)
+    do
     {
-        input = Serial.read();
-        if ((input >= '0') && (input <= '9'))
-        {
-            relay = input - '0';
-        }
-        else if ((input >= 'a') && (input <= 'z'))
-        {
-            relay = (input - 'a')+10;
-        }
-        if (input == '*')
-        {
-            Serial.println("Clear");
-            resetPins(false);
-        }
-        else if (relay < NUM_RELAYS)
-        {
-            olat ^= (1 << relay);
-            digitalWrite(relay2PinMapping[relay], (olat >> relay) & 0x1);
-        }
+        err = deserializeJson(input, Serial);
+    } while (err == DeserializationError::EmptyInput);
 
-        for (relay = 0; relay < NUM_RELAYS; relay++)
+    if (err)
+    {
+        Serial.print(F("deserializeJson() failed with code "));
+        Serial.println(err.f_str());
+        return;
+    }
+    else
+    {
+        if (input.containsKey("relays"))
         {
-            Serial.print(relay);
-            Serial.print((olat & (1 << relay) ? ": ON  " : ": OFF "));
+            uint8_t i;
+            int count = input["relays"].size();
+
+            for (i=0; i<count; i++)
+            {
+                setRelay(
+                    input["relays"][i]["port"],
+                    input["relays"][i]["enable"]
+                );
+            }
         }
-        Serial.println();
+        if (input.containsKey("command"))
+        {
+            if (0 == strcmp(input["command"], "status")) {printStatus();}
+            else if (0 == strcmp(input["command"], "info")) { printInfo();}
+        }
     }
 }
