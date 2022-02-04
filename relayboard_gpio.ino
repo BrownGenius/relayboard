@@ -40,7 +40,7 @@ uint8_t relay2PinMapping[RELAY_COUNT] = {
 {"command":"status"}
 
 {"command":"info","relays":[{"port":0,"enable":false},{"port":2,"enable":false}]}
-
+{"relays":[{"port":0,"enable":false},{"port":2,"enable":false}]}
 {"command":"info"}
 
 
