@@ -43,9 +43,11 @@ uint8_t relay2PinMapping[RELAY_COUNT] = {
 
 {"command":"info"}
 
+
+{"relays":[{"port":0,"enable":false},{"port":1,"enable":true},{"port":2,"enable":false},{"port":3,"enable":true},{"port":4,"enable":true},{"port":5,"enable":true},{"port":6,"enable":true},{"port":7,"enable":true},{"port":8,"enable":true},{"port":9,"enable":true},{"port":10,"enable":true},{"port":11,"enable":true},{"port":12,"enable":true},{"port":13,"enable":true},{"port":14,"enable":true},{"port":15,"enable":true}]}
 #endif
 
-#define VERSION 0x20220202
+#define VERSION 0x20220204
 
 StaticJsonDocument<32*RELAY_COUNT> status;
 StaticJsonDocument<32*RELAY_COUNT> input;
@@ -76,15 +78,13 @@ void setRelay(uint8_t relay, bool enable)
     status["relays"][relay]["enable"] = enable;
 }
 
-void initRelays(bool initialize)
+void initRelays()
 {
     uint8_t relay;
 
     for (relay = 0; relay < RELAY_COUNT; relay++)
     {
-        if (initialize) {
-            pinMode(relay2PinMapping[relay], OUTPUT);
-        }
+        pinMode(relay2PinMapping[relay], OUTPUT);
         setRelay(relay, true);
     }
 }
@@ -92,14 +92,12 @@ void initRelays(bool initialize)
 void setup()
 {
     status.createNestedArray("relays");
-
-    initRelays(true);
+    initRelays();
 
     // start serial port at 9600 bps and wait for port to open:
     Serial.begin(9600);
     while (!Serial)
         ; // wait for serial port to connect. Needed for Leonardo only
-    printInfo();
 }
 
 void loop()
@@ -134,8 +132,8 @@ void loop()
         }
         if (input.containsKey("command"))
         {
-            if (0 == strcmp(input["command"], "status")) {printStatus();}
-            else if (0 == strcmp(input["command"], "info")) { printInfo();}
+            if (0 == strcmp(input["command"], "status")) { printStatus(); }
+            else if (0 == strcmp(input["command"], "info")) { printInfo(); }
         }
     }
 }
