@@ -47,7 +47,7 @@ uint8_t relay2PinMapping[RELAY_COUNT] = {
 {"relays":[{"port":0,"enable":false},{"port":1,"enable":true},{"port":2,"enable":false},{"port":3,"enable":true},{"port":4,"enable":true},{"port":5,"enable":true},{"port":6,"enable":true},{"port":7,"enable":true},{"port":8,"enable":true},{"port":9,"enable":true},{"port":10,"enable":true},{"port":11,"enable":true},{"port":12,"enable":true},{"port":13,"enable":true},{"port":14,"enable":true},{"port":15,"enable":true}]}
 #endif
 
-#define VERSION 0x20220204
+#define VERSION 0x20220206
 
 StaticJsonDocument<32*RELAY_COUNT> status;
 StaticJsonDocument<32*RELAY_COUNT> input;
@@ -129,6 +129,8 @@ void loop()
                     input["relays"][i]["enable"]
                 );
             }
+
+            printStatus();
         }
         if (input.containsKey("command"))
         {
