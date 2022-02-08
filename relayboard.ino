@@ -1,6 +1,6 @@
 
-#define BUILD_TYPE_GPIO 1
-#define BUILD_TYPE_I2C 0
+#define BUILD_TYPE_GPIO 0
+#define BUILD_TYPE_I2C 1
 
 #include <ArduinoJson.h>
 /* Required the following Arduino Libraries
@@ -13,11 +13,6 @@
 #define MODEL "I2C Relay Board"
 
 #include <Wire.h>
-#include <Adafruit_MCP23X08.h>
-
-/* Required the following Arduino Libraries
- - Adafruit MCP23017 library (v2.0.2)
-*/
 
 // I2C Relayboard test
 // connect VDD to power 5V
@@ -25,10 +20,10 @@
 // connect SDA to digital SDA (I2C DATA)
 // connect SCL to digital ACL (I2C CLOCK)
 
-#define RELAY_COUNT 8
+#define RELAY_COUNT 16
 #define RELAY_ENABLE 0
 #define RELAY_DISABLE 1
-#define I2C_BOARD_COUNT 1
+#define I2C_BOARD_COUNT 2
 
 uint8_t relay2PinMapping[RELAY_COUNT] = {
     0,
@@ -39,7 +34,7 @@ uint8_t relay2PinMapping[RELAY_COUNT] = {
     5,
     6,
     7,
-#if 0
+#if RELAY_COUNT > 8
     0,
     1,
     2,
@@ -47,32 +42,63 @@ uint8_t relay2PinMapping[RELAY_COUNT] = {
     4,
     5,
     6,
-    7
+    7,
 #endif
 };
 
-uint8_t relay2BoardMapping[RELAY_COUNT] = {
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
+uint8_t board2AddressMapping[I2C_BOARD_COUNT] =
+{
+    0x20,
+#if I2C_BOARD_COUNT > 1
+    0x21,
+#endif
+};
+
+uint8_t relay2BoardMapping(uint8_t relay)
+{
+    if (relay < 8) {
+        return 0;
+    } else {
+        return 1;
+    }
+}
+
+uint8_t writeI2CRegister(uint8_t deviceAddr, uint8_t registerAddr, uint8_t value)
+{
 #if 0
-    1,
-    1,
-    1,
-    1,
-    1,
-    1,
-    1,
-    1,
+    Serial.print("I2C ");
+    Serial.print(deviceAddr);
+    Serial.print("@");
+    Serial.print(registerAddr);
+    Serial.print(" <-- ");
+    Serial.println(value);
 #endif
-};
+    Wire.beginTransmission(deviceAddr); //begins talking to the slave device
+    Wire.write(registerAddr); //selects register
+    Wire.write(value); // write value
+    Wire.endTransmission(); //ends communication with the device
+}
 
-Adafruit_MCP23X08 mcp[I2C_BOARD_COUNT];
+uint8_t readI2CRegister(uint8_t deviceAddr, uint8_t registerAddr)
+{
+    uint8_t value;
+    Wire.beginTransmission(deviceAddr); //begins talking to the slave device
+    Wire.write(registerAddr); //selects register
+    Wire.endTransmission(); //ends communication with the device
+    Wire.requestFrom(deviceAddr, (uint8_t)1);
+    value = Wire.read();
+
+#if 0
+    Serial.print("I2C ");
+    Serial.print(deviceAddr);
+    Serial.print("@");
+    Serial.print(registerAddr);
+    Serial.print(" --> ");
+    Serial.println(value);
+#endif
+
+    return value;
+}
 #else
 #define MODEL "GPIO Relay Board"
 // GPIO Relayboard test
@@ -127,14 +153,13 @@ uint8_t relay2PinMapping[RELAY_COUNT] = {
 {"relays":[{"port":2,"enable":false},{"port":3,"enable":false}]}
 #endif
 
-#define VERSION 0x20220207
+#define VERSION 0x20220208
 
 StaticJsonDocument<32*RELAY_COUNT> status;
-StaticJsonDocument<32*RELAY_COUNT> input;
 
 void printInfo()
 {
-    StaticJsonDocument<256> info;
+    StaticJsonDocument<64> info;
 
     info["model"] = MODEL;
     info["version"] = VERSION;
@@ -152,9 +177,12 @@ void printStatus()
 
 void setRelay(uint8_t relay, bool enable)
 {
-    /* TODO: Validate relay */
 #if BUILD_TYPE_I2C
-    mcp[relay2BoardMapping[relay]].digitalWrite(relay2PinMapping[relay], enable ? RELAY_ENABLE : RELAY_DISABLE);
+    uint8_t olat;
+    olat = readI2CRegister(board2AddressMapping[relay2BoardMapping(relay)], 0x0A);
+    olat &= ~((uint8_t)1 << relay2PinMapping[relay]);
+    olat |= ((uint8_t)(enable ? RELAY_ENABLE : RELAY_DISABLE) << relay2PinMapping[relay]);
+    writeI2CRegister(board2AddressMapping[relay2BoardMapping(relay)], 0x0A, olat);
 #else
     digitalWrite(relay2PinMapping[relay], enable ? RELAY_ENABLE : RELAY_DISABLE);
 #endif
@@ -168,10 +196,12 @@ void initRelays()
 
 #if BUILD_TYPE_I2C
     uint8_t board;
+    Wire.begin();
+
     for (board = 0; board < I2C_BOARD_COUNT; board++)
     {
-        Serial.println("configuring MCP board");
-//        mcp[board].begin_I2C(board);
+        // set I/O pins to outputs
+        writeI2CRegister(board2AddressMapping[board], 0x00, 0x00);
     }
 #elif BUILD_TYPE_GPIO
     for (relay = 0; relay < RELAY_COUNT; relay++)
@@ -191,16 +221,13 @@ void setup()
     // start serial port at 9600 bps and wait for port to open:
     Serial.begin(9600);
 
-    Serial.println("Initializing...");
-
     status.createNestedArray("relays");
     initRelays();
-
-    Serial.println("Initialized!");
 }
 
 void loop()
 {
+    StaticJsonDocument<32*RELAY_COUNT> input;
     DeserializationError err;
 
     do
